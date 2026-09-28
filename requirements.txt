@@ -3,12 +3,12 @@
 # its TF1 graph-mode code through tf.compat.v1 on top of this.
 tensorflow>=2.13,<2.16
 
-+# --- CUDA students (WSL2 only) ---
-+# If you're running this inside WSL2 on a Windows machine with an NVIDIA GPU,
-+# comment out the plain `tensorflow` line above and uncomment the line below
-+# instead. Native Windows Python can't do this (no GPU wheels since TF 2.10) —
-+# this only works inside the actual WSL2 Linux environment.
-+# tensorflow[and-cuda]>=2.13,<2.16
+# --- CUDA students (WSL2 only) ---
+# If you're running this inside WSL2 on a Windows machine with an NVIDIA GPU,
+# comment out the plain `tensorflow` line above and uncomment the line below
+# instead. Native Windows Python can't do this (no GPU wheels since TF 2.10) —
+# this only works inside the actual WSL2 Linux environment.
+# tensorflow[and-cuda]>=2.13,<2.16
 
 # TF1-era code in the vendored repo is not NumPy-2.0-safe. Keep this pinned.
 numpy<2
