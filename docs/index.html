@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sky from a silhouette</title>
+<meta name="description" content="Paint a cloud edge in black on white and a pix2pix model trained on one video of clouds turns it into sky.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #e9eef3;
+    --ink: #000;
+    --cloud: #fff;
+    --sky: #0b4a8c;
+    --sky-deep: #083565;
+    --rule: #bcc8d4;
+    --quiet: #46566a;
+    --gap: 20px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 16px/1.5 "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  }
+  main {
+    max-width: 1092px;
+    margin: 0 auto;
+    padding: 40px 24px 56px;
+  }
+  header { margin-bottom: 28px; }
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    font-weight: 600;
+    margin: 0 0 12px;
+  }
+  header p { margin: 0; max-width: 58ch; color: var(--quiet); }
+
+  .stage {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--gap);
+    align-items: start;
+  }
+  figure { margin: 0; }
+  figcaption {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.875rem;
+    color: var(--quiet);
+    margin-top: 8px;
+    min-height: 1.5em;
+  }
+  .frame {
+    position: relative;
+    aspect-ratio: 1;
+    background: var(--cloud);
+    overflow: hidden;
+  }
+  .frame canvas { display: block; width: 100%; height: 100%; }
+  #draw { touch-action: none; cursor: none; }
+  #out { background: var(--sky); }
+  #cursor {
+    position: absolute;
+    left: 0; top: 0;
+    border-radius: 50%;
+    border: 1.5px solid #fff;
+    mix-blend-mode: difference;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    display: none;
+  }
+  .veil {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding: 24px;
+    text-align: center;
+    color: #fff;
+    background: var(--sky);
+  }
+  .veil[hidden] { display: none; }
+  .veil progress { width: min(240px, 70%); height: 6px; margin-top: 12px; accent-color: #fff; }
+
+  .tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 16px;
+    margin-top: var(--gap);
+    padding-top: var(--gap);
+    border-top: 1px solid var(--rule);
+  }
+  .group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .push { margin-left: auto; }
+
+  button, .filebtn {
+    font: inherit;
+    font-weight: 500;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--ink);
+    border-radius: 999px;
+    padding: 7px 16px;
+    cursor: pointer;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+  button:hover, .filebtn:hover { background: #fff; }
+  button:disabled { opacity: 0.4; cursor: default; background: transparent; }
+  button.primary { background: var(--sky); border-color: var(--sky); color: #fff; padding-inline: 22px; }
+  button.primary:hover { background: var(--sky-deep); border-color: var(--sky-deep); }
+  button.primary:disabled { background: var(--sky); }
+  :focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
+
+  .ink { display: inline-flex; border: 1px solid var(--ink); border-radius: 999px; overflow: hidden; }
+  .ink label { cursor: pointer; }
+  .ink input { position: absolute; opacity: 0; pointer-events: none; }
+  .ink span { display: block; padding: 7px 16px; font-weight: 500; line-height: 1.3; }
+  .ink input:checked + span.b { background: #000; color: #fff; }
+  .ink input:checked + span.w { background: #fff; color: #000; box-shadow: inset 0 0 0 2px #000; border-radius: 999px; }
+  .ink input:focus-visible + span { outline: 3px solid var(--sky); outline-offset: -3px; }
+
+  input[type="range"] { width: 150px; accent-color: var(--ink); }
+  output { font-variant-numeric: tabular-nums; min-width: 4.5ch; color: var(--quiet); font-size: 0.875rem; }
+  .check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.9375rem; white-space: nowrap; }
+  .check input { accent-color: var(--sky); width: 16px; height: 16px; }
+  .filebtn input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .filebtn:focus-within { outline: 3px solid var(--sky); outline-offset: 2px; }
+
+  .starts { margin-top: var(--gap); }
+  .starts p { margin: 0 0 8px; font-size: 0.875rem; color: var(--quiet); }
+  .starts ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .starts button { padding: 0; border-radius: 0; border: 1px solid var(--rule); width: 72px; height: 72px; background: #fff; }
+  .starts button:hover { border-color: var(--ink); }
+  .starts img { display: block; width: 100%; height: 100%; }
+
+  footer {
+    margin-top: 36px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    font-size: 0.875rem;
+    color: var(--quiet);
+    display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center;
+  }
+  footer .filebtn { font-size: 0.875rem; padding: 4px 12px; }
+  kbd { font: inherit; border: 1px solid var(--rule); border-radius: 4px; padding: 0 5px; background: #fff; color: var(--ink); }
+
+  @media (max-width: 820px) {
+    main { padding: 24px 16px 40px; }
+    .stage { grid-template-columns: 1fr; }
+    .push { margin-left: 0; }
+    #draw { cursor: crosshair; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Sky from a silhouette</h1>
+    <p>Paint in black where cloud meets sky. A pix2pix model trained on 655 frames of one cloud video fills in the rest.</p>
+  </header>
+
+  <div class="stage">
+    <figure>
+      <div class="frame" id="drawFrame">
+        <canvas id="draw" width="512" height="512" tabindex="0" aria-label="Drawing canvas: black brush on a white background"></canvas>
+        <div id="cursor" aria-hidden="true"></div>
+      </div>
+      <figcaption><span>Your silhouette</span></figcaption>
+    </figure>
+    <figure>
+      <div class="frame">
+        <canvas id="out" width="256" height="256" aria-label="Generated sky"></canvas>
+        <div class="veil" id="veil" role="status">
+          <div>
+            <div id="veilText">Loading the model…</div>
+            <progress id="veilBar" max="1" value="0"></progress>
+          </div>
+        </div>
+      </div>
+      <figcaption><span>Generated sky</span><span id="status" role="status" aria-live="polite"></span></figcaption>
+    </figure>
+  </div>
+
+  <div class="tools">
+    <div class="group ink" role="radiogroup" aria-label="Brush colour">
+      <label><input type="radio" name="ink" value="#000" checked><span class="b">Black</span></label>
+      <label><input type="radio" name="ink" value="#fff"><span class="w">White</span></label>
+    </div>
+    <div class="group">
+      <label for="size">Brush</label>
+      <input id="size" type="range" min="2" max="160" value="28">
+      <output id="sizeOut" for="size">28 px</output>
+    </div>
+    <div class="group">
+      <button id="undo" disabled>Undo</button>
+      <button id="invert">Invert</button>
+      <button id="clear">Clear</button>
+      <label class="filebtn">Open image<input id="openImage" type="file" accept="image/*"></label>
+    </div>
+    <div class="group push">
+      <label class="check"><input id="live" type="checkbox" checked>Update as I draw</label>
+      <button id="go" class="primary" disabled>Generate</button>
+      <button id="save" disabled>Save PNG</button>
+    </div>
+  </div>
+
+  <div class="starts">
+    <p>Or start from a silhouette the model was trained on</p>
+    <ul id="examples"></ul>
+  </div>
+
+  <footer>
+    <span id="modelName">Model: clouds.pict</span>
+    <label class="filebtn">Try another .pict<input id="openModel" type="file" accept=".pict"></label>
+    <span><kbd>[</kbd> <kbd>]</kbd> brush size, <kbd>X</kbd> swap colour, <kbd>Z</kbd> undo</span>
+  </footer>
+</main>
+
+<script src="lib/tf.min.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  const MODEL_URL = 'model/clouds.pict';
+  const EXAMPLES = ['000050', '000300', '000480', '000600', '000650'].map(n => `examples/${n}.png`);
+  const N = 256;            // the model's input and output size
+  const UNDO_LIMIT = 30;
+
+  const $ = id => document.getElementById(id);
+  const draw = $('draw'), ctx = draw.getContext('2d', { willReadFrequently: true });
+  const out = $('out');
+  const cursor = $('cursor'), frame = $('drawFrame');
+  const statusEl = $('status'), veil = $('veil'), veilText = $('veilText'), veilBar = $('veilBar');
+  const sizeEl = $('size'), sizeOut = $('sizeOut');
+  const undoBtn = $('undo'), goBtn = $('go'), saveBtn = $('save'), liveEl = $('live');
+
+  const small = document.createElement('canvas');
+  small.width = small.height = N;
+  const sctx = small.getContext('2d', { willReadFrequently: true });
+
+  let weights = null;       // variable name -> tensor
+  let busy = false, queued = false;
+  let ink = '#000';
+  const undoStack = [];
+
+  // ---------- model: read a .pict file ----------
+  // Layout: three length-prefixed chunks (big-endian uint32 length, then bytes):
+  //   1. JSON list of {name, shape}   2. 256 float32 values   3. one byte per weight, indexing chunk 2
+  function parsePict(buf) {
+    const view = new DataView(buf);
+    const parts = [];
+    let off = 0;
+    while (off < buf.byteLength) {
+      const len = view.getUint32(off); off += 4;
+      parts.push(buf.slice(off, off + len)); off += len;
+    }
+    if (parts.length < 3) throw new Error('This file is not a pix2pix .pict model.');
+    const shapes = JSON.parse(new TextDecoder().decode(parts[0]));
+    const index = new Float32Array(parts[1]);
+    const codes = new Uint8Array(parts[2]);
+    const vars = {};
+    let p = 0;
+    for (const { name, shape } of shapes) {
+      const size = shape.reduce((a, b) => a * b, 1);
+      const vals = new Float32Array(size);
+      for (let i = 0; i < size; i++) vals[i] = index[codes[p + i]];
+      p += size;
+      vars[name] = tf.tensor(vals, shape);
+    }
+    if (!vars['generator/encoder_1/conv2d/kernel']) throw new Error('This .pict has no pix2pix generator in it.');
+    return vars;
+  }
+
+  async function fetchWithProgress(url, onProgress) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Could not load ${url} (HTTP ${res.status}).`);
+    const total = Number(res.headers.get('content-length')) || 0;
+    if (!res.body || !total) return res.arrayBuffer();
+    const reader = res.body.getReader();
+    const chunks = [];
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); got += value.length;
+      onProgress(got / total);
+    }
+    const all = new Uint8Array(got);
+    let o = 0;
+    for (const c of chunks) { all.set(c, o); o += c.length; }
+    return all.buffer;
+  }
+
+  function useModel(buf, label) {
+    const next = parsePict(buf);
+    if (weights) Object.values(weights).forEach(t => t.dispose());
+    weights = next;
+    $('modelName').textContent = `Model: ${label}`;
+    goBtn.disabled = false;
+    veil.hidden = true;
+  }
+
+  // ---------- model: the pix2pix generator (U-Net, 8 down / 8 up) ----------
+  function generate(input) {            // input: [1, 256, 256, 3] in -1..1
+    const w = weights;
+    const norm = (x, scope) => {
+      const { mean, variance } = tf.moments(x, [0, 1, 2]);
+      return tf.batchNorm(x, mean, variance,
+        w[`${scope}/batch_normalization/beta`], w[`${scope}/batch_normalization/gamma`], 1e-5);
+    };
+    const down = (x, scope) =>
+      tf.conv2d(x, w[`${scope}/conv2d/kernel`], 2, 'same').add(w[`${scope}/conv2d/bias`]);
+    const up = (x, scope) => {
+      const k = w[`${scope}/conv2d_transpose/kernel`];
+      const [, h, wd] = x.shape;
+      return tf.conv2dTranspose(x, k, [1, h * 2, wd * 2, k.shape[2]], 2, 'same')
+        .add(w[`${scope}/conv2d_transpose/bias`]);
+    };
+
+    const layers = [down(input, 'generator/encoder_1')];
+    for (let i = 2; i <= 8; i++) {
+      const scope = `generator/encoder_${i}`;
+      layers.push(norm(down(tf.leakyRelu(layers[layers.length - 1], 0.2), scope), scope));
+    }
+    for (let i = 8; i >= 2; i--) {
+      const scope = `generator/decoder_${i}`;
+      const last = layers[layers.length - 1];
+      const x = i === 8 ? last : tf.concat([last, layers[i - 1]], 3);
+      layers.push(norm(up(tf.relu(x), scope), scope));
+    }
+    const x = tf.concat([layers[layers.length - 1], layers[0]], 3);
+    return tf.tanh(up(tf.relu(x), 'generator/decoder_1'));
+  }
+
+  async function run() {
+    if (!weights) return;
+    if (busy) { queued = true; return; }
+    busy = true;
+    statusEl.textContent = 'Generating…';
+    try {
+      sctx.drawImage(draw, 0, 0, N, N);
+      const t0 = performance.now();
+      const img = tf.tidy(() => {
+        const input = tf.browser.fromPixels(small).toFloat().div(127.5).sub(1).expandDims(0);
+        return generate(input).squeeze([0]).add(1).div(2).clipByValue(0, 1);
+      });
+      await tf.browser.toPixels(img, out);
+      img.dispose();
+      statusEl.textContent = `${Math.round(performance.now() - t0)} ms`;
+      saveBtn.disabled = false;
+    } catch (err) {
+      console.error(err);
+      statusEl.textContent = 'Generation failed. Reload the page and try again.';
+    }
+    busy = false;
+    if (queued) { queued = false; run(); }
+  }
+
+  // ---------- drawing ----------
+  function fillWhite() { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, draw.width, draw.height); }
+
+  function snapshot() {
+    undoStack.push(ctx.getImageData(0, 0, draw.width, draw.height));
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    undoBtn.disabled = false;
+  }
+  function undo() {
+    const last = undoStack.pop();
+    if (!last) return;
+    ctx.putImageData(last, 0, 0);
+    undoBtn.disabled = undoStack.length === 0;
+    changed();
+  }
+  function changed() { if (liveEl.checked) run(); }
+
+  function pos(e) {
+    const r = draw.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * draw.width / r.width, y: (e.clientY - r.top) * draw.height / r.height, r };
+  }
+  function moveCursor(e) {
+    const { r } = pos(e);
+    const d = sizeEl.value * r.width / draw.width;
+    cursor.style.width = cursor.style.height = `${d}px`;
+    cursor.style.left = `${e.clientX - r.left}px`;
+    cursor.style.top = `${e.clientY - r.top}px`;
+  }
+
+  let last = null;
+  draw.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    draw.setPointerCapture(e.pointerId);
+    snapshot();
+    const p = pos(e);
+    ctx.fillStyle = ink;
+    ctx.beginPath(); ctx.arc(p.x, p.y, sizeEl.value / 2, 0, Math.PI * 2); ctx.fill();
+    last = p;
+    e.preventDefault();
+  });
+  draw.addEventListener('pointermove', e => {
+    if (e.pointerType === 'mouse') { cursor.style.display = 'block'; moveCursor(e); }
+    if (!last) return;
+    const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    ctx.strokeStyle = ink; ctx.lineWidth = sizeEl.value; ctx.lineCap = ctx.lineJoin = 'round';
+    for (const ev of (events.length ? events : [e])) {
+      const p = pos(ev);
+      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+      last = p;
+    }
+  });
+  const endStroke = () => { if (last) { last = null; changed(); } };
+  draw.addEventListener('pointerup', endStroke);
+  draw.addEventListener('pointercancel', endStroke);
+  draw.addEventListener('pointerleave', () => { cursor.style.display = 'none'; });
+
+  function setSize(v) {
+    sizeEl.value = Math.max(sizeEl.min, Math.min(sizeEl.max, Math.round(v)));
+    sizeOut.textContent = `${sizeEl.value} px`;
+    const r = draw.getBoundingClientRect();
+    cursor.style.width = cursor.style.height = `${sizeEl.value * r.width / draw.width}px`;
+  }
+  sizeEl.addEventListener('input', () => setSize(sizeEl.value));
+
+  function setInk(v) {
+    ink = v;
+    document.querySelector(`input[name="ink"][value="${v}"]`).checked = true;
+  }
+  document.querySelectorAll('input[name="ink"]').forEach(el =>
+    el.addEventListener('change', () => { ink = el.value; }));
+
+  undoBtn.addEventListener('click', undo);
+  $('clear').addEventListener('click', () => { snapshot(); fillWhite(); changed(); });
+  $('invert').addEventListener('click', () => {
+    snapshot();
+    const d = ctx.getImageData(0, 0, draw.width, draw.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      d.data[i] = 255 - d.data[i]; d.data[i + 1] = 255 - d.data[i + 1]; d.data[i + 2] = 255 - d.data[i + 2];
+    }
+    ctx.putImageData(d, 0, 0);
+    changed();
+  });
+
+  function placeImage(img) {            // centre-crop to a square, like the training data
+    snapshot();
+    const s = Math.min(img.naturalWidth, img.naturalHeight);
+    fillWhite();
+    ctx.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, draw.width, draw.height);
+    changed();
+  }
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('That file could not be read as an image.'));
+      img.src = src;
+    });
+  }
+  $('openImage').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    try { placeImage(await loadImage(url)); }
+    catch (err) { statusEl.textContent = err.message; }
+    URL.revokeObjectURL(url);
+    e.target.value = '';
+  });
+
+  goBtn.addEventListener('click', run);
+  saveBtn.addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.download = 'sky.png';
+    a.href = out.toDataURL('image/png');
+    a.click();
+  });
+
+  $('openModel').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    statusEl.textContent = 'Reading model…';
+    try { useModel(await file.arrayBuffer(), file.name); await run(); }
+    catch (err) { console.error(err); statusEl.textContent = err.message; }
+    e.target.value = '';
+  });
+
+  window.addEventListener('keydown', e => {
+    if (e.target.matches('input[type="range"], input[type="file"]')) return;
+    const k = e.key.toLowerCase();
+    if (k === '[') setSize(sizeEl.value * 0.8 - 1);
+    else if (k === ']') setSize(sizeEl.value * 1.25 + 1);
+    else if (k === 'x' && !e.metaKey && !e.ctrlKey) setInk(ink === '#000' ? '#fff' : '#000');
+    else if (k === 'z') { e.preventDefault(); undo(); }
+  });
+
+  // ---------- start ----------
+  const list = $('examples');
+  EXAMPLES.forEach((src, i) => {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.setAttribute('aria-label', `Use training silhouette ${i + 1}`);
+    const im = document.createElement('img');
+    im.src = src; im.alt = ''; im.loading = 'lazy';
+    b.append(im);
+    b.addEventListener('click', async () => {
+      try { placeImage(await loadImage(src)); } catch (err) { statusEl.textContent = err.message; }
+    });
+    li.append(b); list.append(li);
+  });
+
+  fillWhite();
+  setSize(sizeEl.value);
+
+  (async () => {
+    try {
+      const first = loadImage(EXAMPLES[0]).catch(() => null);
+      const buf = await fetchWithProgress(MODEL_URL, f => { veilBar.value = f; });
+      veilText.textContent = 'Preparing the model…';
+      await tf.ready();
+      await new Promise(requestAnimationFrame);
+      useModel(buf, MODEL_URL.split('/').pop());
+      const img = await first;
+      if (img) { ctx.drawImage(img, 0, 0, draw.width, draw.height); }
+      await run();
+    } catch (err) {
+      console.error(err);
+      veilBar.hidden = true;
+      veilText.textContent = location.protocol === 'file:'
+        ? 'This page has to be served over http to load the model. Run "python3 -m http.server" in the docs folder and open http://localhost:8000.'
+        : `${err.message} You can still load a .pict file with "Try another .pict" below.`;
+    }
+  })();
+})();
+</script>
+</body>
+</html>
